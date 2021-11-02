@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -27,28 +29,8 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
 */
         #endregion
 
-        #region 지역코드
-        /*        
-        string seoulCode = "11110"; //서울
-        string gyeongCode = "64100"; //경기도
-        string gangCode = "64200"; //강원도
-        string cbCode = "64300"; //충청북도
-        string cnCode = "64400"; //충청남도
-        string gbCode = "64700"; //경상북도
-        string gnCode = "64800"; //경상남도
-        string jbCode = "64500"; //전라북도
-        string jnCode = "64600"; //전라남도
-        string jjCode = "65000"; //제주도
-        string incheonCode = "62800"; //인천광역시
-        string daeCode = "63000"; //대전광역시
-        string daegooCode = "62700"; //대구광역시
-        string woolCode = "63100"; //울산광역시
-        string busanCode = "62600"; //부산광역시
-        string gwangCode = "62900"; //광주광역시
-        */
-        #endregion
-
         string today = "&DEAL_YMD=" + DateTime.Now.ToString("yyyyMM");
+
         #region 자료구조
         public class Colums
         {
@@ -57,63 +39,76 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
             public string DY { get; set; } //계약년도
             public string DM { get; set; } //계약월
             public string DD { get; set; } //계약일
+            public string DT { get; set; } //전월세 구분
             public string BY { get; set; } //건축년도
-            public string Area { get; set; } //면적
+            public string BT { get; set; } //주택유형
+            public string Bub { get; set; } //법정동
+            public string Area { get; set; } //대지면적
+            public string AreaY { get; set; } //연면적
+            public string AreaD { get; set; } //계약면적
+            public string Address1 { get; set; } //지역(도, 특별시, 특례시, 광역시)
+            public string Address2 { get; set; } //지역(시군구)
             public string AN { get; set; } //아파트 이름
             public string CDD { get; set; } //해체사유발생일
-            public int Deposit { get; set; } //보증금
+            public string Deposit { get; set; } //보증금, 거래금액
+            public string MD { get; set; } //월세
             public int Floor { get; set; } //층
         }
         List<Colums> colums = new List<Colums>();
         #endregion
+
+        /// <summary>
+        /// API 데이터 가져오기
+        /// </summary>
         public void getResults()
         {
             #region api url
             string[] urls = new string[11];
 
-            urls[0] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSHTrade?_wadl&type=xml"; //단독다가구 매매
-            urls[1] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSHRent?_wadl&type=xml"; //단독다가구 전월세
-            urls[2] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcOffiTrade?_wadl&type=xml"; //오피스텔 매매
-            urls[3] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcOffiRent?_wadl&type=xml"; //오피스텔 전월세
-            urls[4] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev?_wadl&type=xml"; //아파트 매매
-            urls[5] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent?_wadl&type=xml"; //아파트 전월세
-            urls[6] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTrade?_wadl&type=xml"; //아파트 분양권
-            urls[7] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcNrgTrade?_wadl&type=xml"; //상업업무용
-            urls[8] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRhTrade?_wadl&type=xml"; //연립다세대 매매
-            urls[9] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent?_wadl&type=xml"; //연립다세대 전월세
-            urls[10] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcLandTrade?_wadl&type=xml"; //토지
+            urls[0] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSHTrade"; //단독다가구 매매
+            urls[1] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSHRent"; //단독다가구 전월세
+            urls[2] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcOffiTrade"; //오피스텔 매매
+            urls[3] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcOffiRent"; //오피스텔 전월세
+            urls[4] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev"; //아파트 매매
+            urls[5] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent"; //아파트 전월세
+            urls[6] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTradel"; //아파트 분양권
+            urls[7] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcNrgTrade"; //상업업무용
+            urls[8] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRhTrade"; //연립다세대 매매
+            urls[9] = "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent"; //연립다세대 전월세
+            urls[10] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcLandTrade"; //토지
             #endregion
 
             #region 지역코드 리스트
             string[] codes = new string[16];
-            codes[0] = "11110"; //서울
-            codes[1] = "64100"; //경기도
-            codes[2] = "64200"; //강원도
-            codes[3] = "64300"; //충청북도
-            codes[4] = "64400"; //충청남도
-            codes[5] = "64700"; //경상북도
-            codes[6] = "64800"; //경상남도
-            codes[7] = "64500"; //전라북도
-            codes[8] = "64600"; //전라남도
-            codes[9] = "65000"; //제주도
-            codes[10] = "62800"; //인천광역시
-            codes[11] = "63000"; //대전광역시
-            codes[12] = "62700"; //대구광역시
-            codes[13] = "63100"; //울산광역시
-            codes[14] = "62600"; //부산광역시
-            codes[15] = "62900"; //광주광역시
+            codes[0] = "11110!@#서울특별시"; //서울
+            codes[1] = "64100!@#경기도"; //경기도
+            codes[2] = "64200!@#강원도"; //강원도
+            codes[3] = "64300!@#충청북도"; //충청북도
+            codes[4] = "64400!@#충청남도"; //충청남도
+            codes[5] = "64700!@#경상북도"; //경상북도
+            codes[6] = "64800!@#경상남도"; //경상남도
+            codes[7] = "64500!@#전라북도"; //전라북도
+            codes[8] = "64600!@#전라남도"; //전라남도
+            codes[9] = "65000!@#제주도"; //제주도
+            codes[10] = "62800!@#인천광역시"; //인천광역시
+            codes[11] = "63000!@#대전광역시"; //대전광역시
+            codes[12] = "62700!@#대구광역시"; //대구광역시
+            codes[13] = "63100!@#울산광역시"; //울산광역시
+            codes[14] = "62600!@#부산광역시"; //부산광역시
+            codes[15] = "62900!@#광주광역시"; //광주광역시
             #endregion
-            string serviceKey = "7LxnnA3%2B7VG88HLozXe%2BwxvC8dB58arnn4YM3mhcgmQcWXXsM4FY8ZS34MOyZieNoNwDBOeySlqV9YHjyMeMhA%3D%3D";
-            serviceKey = "&serviceKey=" + HttpUtility.UrlEncode(serviceKey, Encoding.GetEncoding("UTF-8"));
+
+            string serviceKey = "?serviceKey=7LxnnA3%2B7VG88HLozXe%2BwxvC8dB58arnn4YM3mhcgmQcWXXsM4FY8ZS34MOyZieNoNwDBOeySlqV9YHjyMeMhA%3D%3D";
             string search = "";
 
-            for (int i = 0; i < urls.Length; i++)
+            for (int i = 0; i < urls.Length; i++) //부동산 거래 항목(주택, 아파트, 오피스텔 등등)
             {
-                for (int j = 0; j < codes.Length; j++)
+                for (int j = 0; j < codes.Length; j++) //법정동 코드에 따른 분류
                 {
-                    search = "?LAWD_CD=" + codes[j] + "&DEAL_YMD=202110";
+                    string[] code = codes[j].Split(new string[] { "!@#" }, StringSplitOptions.None); //법정동 코드와 지역이름 나누기
+                    search = "&LAWD_CD=" + code[0] + "&DEAL_YMD=202110";
                     WebClient wc = new WebClient() { Encoding = Encoding.UTF8 };
-                    WebRequest wrq = WebRequest.Create(urls[i] + search + serviceKey);
+                    WebRequest wrq = WebRequest.Create(urls[i] + serviceKey + search);
                     wrq.Method = "GET";
 
                     WebResponse wrs = wrq.GetResponse();
@@ -126,8 +121,33 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
                     XmlDocument xd = new XmlDocument();
                     xd.LoadXml(response);
                     XmlNode xn = xd["response"]["body"]["items"];
+
+                    for(int k = 0; k < xn.ChildNodes.Count; k++) //api 데이터
+                    {
+                        Colums cl = new Colums();
+                        if (i == 0) //단독 다가구 매매
+                        {
+                            cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
+                            cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
+                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                            cl.BT = xn.ChildNodes[k]["주택유형"].InnerText.Trim();
+                            cl.Area = xn.ChildNodes[k]["대지면적"].InnerText.Trim();
+                            cl.AreaY = xn.ChildNodes[k]["연면적"].InnerText.Trim();
+                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();      
+                            cl.Address1 = code[1];
+                            cl.Address2 = getAddress(cl.Bub); //시군구 가져오기
+                        }
+                        else if (i == 1)
+                        {
+
+                        }
+                        colums.Add(cl);
+                    }                  
                 }
             }
+
             //int today = Convert.ToInt32(xn.ChildNodes[0]["decideCnt"].InnerText);
             //int yday = Convert.ToInt32(xn.ChildNodes[1]["decideCnt"].InnerText);
             //int today_decide = today - yday;
@@ -136,6 +156,27 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
             //this.label7.Text = xn.ChildNodes[0]["clearCnt"].InnerText;
             //this.label8.Text = xn.ChildNodes[0]["deathCnt"].InnerText;
             //this.label10.Text = DateTime.Now.ToString("yyyy-MM-dd");
+        }
+        public string getAddress(string bub) //시군구 가져오기
+        {
+            string address = "";
+            string sql = string.Format("SELECT TOP 1 시군구 FROM dbo.읍면동$ WHERE 법정동 = '{0}'", bub);
+            using (var connection = new SqlConnection(ConfigurationManager.ConnectionStrings["EFDbcontext"].ConnectionString))
+            {
+                var command = new SqlCommand(sql, connection);
+                connection.Open();
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    if (reader.HasRows)
+                    {
+                        while (reader.Read())
+                        {
+                            address = reader["시군구"].ToString();
+                        }
+                    }
+                }
+            }
+            return address;
         }
     }
 }
