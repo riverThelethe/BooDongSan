@@ -31,7 +31,7 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
 
         string today = "&DEAL_YMD=" + DateTime.Now.ToString("yyyyMM");
 
-        #region 자료구조
+        #region 부동산 거래 자료구조
         public class Colums
         {
             public string Local { get; set; } //지역
@@ -48,7 +48,7 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
             public string Bub { get; set; } //법정동
             public string Area { get; set; } //대지면적
             public string AreaY { get; set; } //연면적
-            public string AreaD { get; set; } //계약면적
+            public string AreaD { get; set; } //계약면적, 거래면적
             public string AreaE { get; set; } //전용면적
             public string Address1 { get; set; } //지역(도, 특별시, 특례시, 광역시)
             public string Address2 { get; set; } //지역(시군구)
@@ -60,8 +60,20 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
             public string Ownership { get; set; } //분양권/입주권 구분
             public string BuildU { get; set; } //건물주용도
             public string LandU { get; set; } //용도지역
+            public string LU { get; set; } //지목
+            public string Partial { get; set; } //거래지분
         }
         List<Colums> colums = new List<Colums>();
+        #endregion
+
+        #region 읍면동 자료구조
+        public class Ebmyundong //시도, 시군구, 법정동
+        {
+            public string Sido { get; set; } //시도
+            public string Sigungu { get; set; } //시군구
+            public string bubcode { get; set; } //법정동코드
+        }
+        List<Ebmyundong> emd = new List<Ebmyundong>();
         #endregion
 
         /// <summary>
@@ -69,6 +81,8 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
         /// </summary>
         public void getResults()
         {
+            emd = getAddress();
+
             #region api url
             string[] urls = new string[11];
 
@@ -85,35 +99,21 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
             urls[10] = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcLandTrade"; //토지
             #endregion
 
-            #region 지역코드 리스트
-            string[] codes = new string[16];
-            codes[0] = "11000!@#서울특별시"; //서울
-            codes[1] = "64100!@#경기도"; //경기도
-            codes[2] = "64200!@#강원도"; //강원도
-            codes[3] = "64300!@#충청북도"; //충청북도
-            codes[4] = "64400!@#충청남도"; //충청남도
-            codes[5] = "64700!@#경상북도"; //경상북도
-            codes[6] = "64800!@#경상남도"; //경상남도
-            codes[7] = "64500!@#전라북도"; //전라북도
-            codes[8] = "64600!@#전라남도"; //전라남도
-            codes[9] = "65000!@#제주도"; //제주도
-            codes[10] = "62800!@#인천광역시"; //인천광역시
-            codes[11] = "63000!@#대전광역시"; //대전광역시
-            codes[12] = "62700!@#대구광역시"; //대구광역시
-            codes[13] = "63100!@#울산광역시"; //울산광역시
-            codes[14] = "62600!@#부산광역시"; //부산광역시
-            codes[15] = "62900!@#광주광역시"; //광주광역시
-            #endregion
-
             string serviceKey = "?serviceKey=7LxnnA3%2B7VG88HLozXe%2BwxvC8dB58arnn4YM3mhcgmQcWXXsM4FY8ZS34MOyZieNoNwDBOeySlqV9YHjyMeMhA%3D%3D";
             string search = "";
 
             for (int i = 0; i < urls.Length; i++) //부동산 거래 항목(주택, 아파트, 오피스텔 등등)
             {
-                for (int j = 0; j < codes.Length; j++) //법정동 코드에 따른 분류
+                for (int j = 0; j < emd.Count; j++) //법정동 코드에 따른 분류
                 {
-                    string[] code = codes[j].Split(new string[] { "!@#" }, StringSplitOptions.None); //법정동 코드와 지역이름 나누기
-                    search = "&LAWD_CD=" + code[0] + "&DEAL_YMD=202110";
+                    string ad1 = ""; //시도
+                    string ad2 = ""; //시군구
+                    string address = searchAddress(emd[j].bubcode); //법정동 코드로 시도, 시군구 찾기
+                    string[] ad = address.Split(new string[] { "!@#" }, StringSplitOptions.None);
+                    ad1 = ad[0];
+                    ad2 = ad[1];
+
+                    search = "&LAWD_CD=" + emd[j].bubcode + "&DEAL_YMD=202110";
                     WebClient wc = new WebClient() { Encoding = Encoding.UTF8 };
                     WebRequest wrq = WebRequest.Create(urls[i] + serviceKey + search);
                     wrq.Method = "GET";
@@ -128,166 +128,230 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
                     XmlDocument xd = new XmlDocument();
                     xd.LoadXml(response);
                     XmlNode xn = xd["response"]["body"]["items"];
-
-                    for(int k = 0; k < xn.ChildNodes.Count; k++) //api 데이터
+                    if(xn.ChildNodes.Count >0)
                     {
-                        Colums cl = new Colums();
-
-                        #region 단독 다가구 매매
-                        if (i == 0) //단독 다가구 매매
+                        for (int k = 0; k < xn.ChildNodes.Count; k++) //api 데이터
                         {
-                            cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
-                            cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
-                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
-                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
-                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
-                            cl.BT = xn.ChildNodes[k]["주택유형"].InnerText.Trim();
-                            cl.Area = xn.ChildNodes[k]["대지면적"].InnerText.Trim();
-                            cl.AreaY = xn.ChildNodes[k]["연면적"].InnerText.Trim();
-                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();      
-                            cl.Address1 = code[1];
-                            cl.Address2 = getAddress(cl.Bub); //시군구 가져오기
-                        }
-                        #endregion
+                            Colums cl = new Colums();
 
-                        #region 단독 다가구 전/월세
-                        else if (i == 1) //단독 다가구 전/월세
-                        {
-                            cl.Deposit = xn.ChildNodes[k]["보증금액"].InnerText.Trim();
-                            cl.MR = xn.ChildNodes[k]["월세금액"].InnerText.Trim();
-                            if (cl.MR == "0") cl.DT = "전세";
-                            else cl.DT = "월세";
-                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
-                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
-                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
-                            cl.AreaD = xn.ChildNodes[k]["계약면적"].InnerText.Trim();
-                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
-                            cl.Address1 = code[1];
-                            cl.Address2 = getAddress(cl.Bub); //시군구 가져오기
-                        }
-                        #endregion
+                            #region 단독 다가구 매매
+                            if (i == 0) //단독 다가구 매매
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
+                                cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.BT = xn.ChildNodes[k]["주택유형"].InnerText.Trim();
+                                cl.Area = xn.ChildNodes[k]["대지면적"].InnerText.Trim();
+                                cl.AreaY = xn.ChildNodes[k]["연면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = ad2;
+                            }
+                            #endregion
 
-                        #region 오피스텔 매매
-                        else if (i == 2) //오피스텔 매매
-                        {
-                            cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
-                            cl.MR = xn.ChildNodes[k]["월세"].InnerText.Trim();
-                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
-                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
-                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
-                            cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
-                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
-                            cl.Address1 = code[1];
-                            cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
-                            cl.AN = xn.ChildNodes[k]["단지"].InnerText.Trim();
-                            cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
-                            cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
-                            cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
-                        }
-                        #endregion
+                            #region 단독 다가구 전/월세
+                            else if (i == 1) //단독 다가구 전/월세
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["보증금액"].InnerText.Trim();
+                                cl.MR = xn.ChildNodes[k]["월세금액"].InnerText.Trim();
+                                if (cl.MR == "0") cl.DT = "전세";
+                                else cl.DT = "월세";
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaD = xn.ChildNodes[k]["계약면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = ad2;
+                            }
+                            #endregion
 
-                        #region 오피스텔 전/월세
-                        else if (i == 3) //오피스텔 전/월세
-                        {
-                            cl.Deposit = xn.ChildNodes[k]["보증금"].InnerText.Trim();
-                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
-                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
-                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
-                            cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
-                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
-                            cl.Address1 = code[1];
-                            cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
-                            cl.AN = xn.ChildNodes[k]["단지"].InnerText.Trim();
-                            cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
-                            cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
-                            cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
-                        }
-                        #endregion
+                            #region 오피스텔 매매
+                            else if (i == 2) //오피스텔 매매
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
+                                cl.AN = xn.ChildNodes[k]["단지"].InnerText.Trim();
+                                cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
+                                cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
+                                cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
+                            }
+                            #endregion
 
-                        #region 아파트 매매
-                        else if (i == 4) //아파트 매매
-                        {
-                            cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
-                            cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
-                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
-                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
-                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
-                            cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
-                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
-                            cl.Address1 = code[1];
-                            cl.Address2 = getAddress(cl.Bub); //시군구 가져오기
-                            cl.AN = xn.ChildNodes[k]["아파트"].InnerText.Trim();
-                            cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
-                            cl.Bon = xn.ChildNodes[k]["법정동본번코드"].InnerText.Trim();
-                            cl.Bu = xn.ChildNodes[k]["법정동부번코드"].InnerText.Trim();
-                            cl.Doro = xn.ChildNodes[k]["도로명"].InnerText.Trim();
-                            cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
-                            cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
-                        }
-                        #endregion
+                            #region 오피스텔 전/월세
+                            else if (i == 3) //오피스텔 전/월세
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["보증금"].InnerText.Trim();
+                                cl.MR = xn.ChildNodes[k]["월세금액"].InnerText.Trim();
+                                if (cl.MR == "0") cl.DT = "전세";
+                                else cl.DT = "월세";
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
+                                cl.AN = xn.ChildNodes[k]["단지"].InnerText.Trim();
+                                cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
+                                cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
+                            }
+                            #endregion
 
-                        #region 아파트 전/월세
-                        else if (i == 5) //아파트 전/월세
-                        {
-                            cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
-                            cl.Ownership = xn.ChildNodes[k]["구분"].InnerText.Trim();
-                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
-                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
-                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
-                            cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
-                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
-                            cl.Address1 = code[1]; //16개 시도
-                            cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
-                            cl.AN = xn.ChildNodes[k]["단지"].InnerText.Trim();
-                            cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
-                            cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
-                        }
-                        #endregion
+                            #region 아파트 매매
+                            else if (i == 4) //아파트 매매
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
+                                cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = ad2;
+                                cl.AN = xn.ChildNodes[k]["아파트"].InnerText.Trim();
+                                cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
+                                cl.Bon = xn.ChildNodes[k]["법정동본번코드"].InnerText.Trim();
+                                cl.Bu = xn.ChildNodes[k]["법정동부번코드"].InnerText.Trim();
+                                cl.Doro = xn.ChildNodes[k]["도로명"].InnerText.Trim();
+                                cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
+                                cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
+                            }
+                            #endregion
 
-                        #region 아파트 분양권
-                        else if (i == 6) //아파트 분양권
-                        {
-                            cl.Deposit = xn.ChildNodes[k]["보증금액"].InnerText.Trim();
-                            cl.MR = xn.ChildNodes[k]["월세금액"].InnerText.Trim();
-                            if (cl.MR == "0") cl.DT = "전세";
-                            else cl.DT = "월세";
-                            cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
-                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
-                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
-                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
-                            cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
-                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
-                            cl.Address1 = code[1]; //16개 시도
-                            cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
-                            cl.AN = xn.ChildNodes[k]["아파트"].InnerText.Trim();
-                            cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
-                            cl.Doro = xn.ChildNodes[k]["도로명"].InnerText.Trim();
-                            cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
-                            cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
-                        }
-                        #endregion
+                            #region 아파트 전/월세
+                            else if (i == 5) //아파트 전/월세
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["보증금액"].InnerText.Trim();
+                                cl.MR = xn.ChildNodes[k]["월세금액"].InnerText.Trim();
+                                if (cl.MR == "0") cl.DT = "전세";
+                                else cl.DT = "월세";
+                                cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = ad2;
+                                cl.AN = xn.ChildNodes[k]["아파트"].InnerText.Trim();
+                                cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
+                                cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
+                            }
+                            #endregion
 
-                        #region 상업 업무용
-                        else if (i == 7) //상업 업무용
-                        {
-                            cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
-                            cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
-                            cl.BuildU = xn.ChildNodes[k]["건물주용도"].InnerText.Trim();
-                            cl.LandU = xn.ChildNodes[k]["용도지역"].InnerText.Trim();
-                            cl.BT = xn.ChildNodes[k]["유형"].InnerText.Trim();
-                            cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
-                            cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
-                            cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
-                            cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
-                            cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
-                            cl.Address1 = code[1];
-                            cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
-                            cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
-                            cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
+                            #region 아파트 분양권
+                            else if (i == 6) //아파트 분양권
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
+                                cl.Ownership = xn.ChildNodes[k]["구분"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
+                                cl.AN = xn.ChildNodes[k]["단지"].InnerText.Trim();
+                                cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
+                                cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
+                                cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
+                            }
+                            #endregion
+
+                            #region 상업 업무용
+                            else if (i == 7) //상업 업무용
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
+                                cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
+                                cl.BuildU = xn.ChildNodes[k]["건물주용도"].InnerText.Trim();
+                                cl.LandU = xn.ChildNodes[k]["용도지역"].InnerText.Trim();
+                                cl.Partial = xn.ChildNodes[k]["구분"].InnerText.Trim();
+                                cl.BT = xn.ChildNodes[k]["유형"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaE = xn.ChildNodes[k]["건물면적"].InnerText.Trim();
+                                cl.Area = xn.ChildNodes[k]["대지면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
+                                cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
+                                cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
+                            }
+                            #endregion
+
+                            #region 연립 매매
+                            else if (i == 8) //연립 다세대 매매
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
+                                cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.AN = xn.ChildNodes[k]["아파트"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
+                                cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
+                                cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
+                                cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
+                            }
+                            #endregion
+
+                            #region 연립 전/월세
+                            else if (i == 9) //연립 다세대 전/월세
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["보증금액"].InnerText.Trim();
+                                cl.MR = xn.ChildNodes[k]["월세금액"].InnerText.Trim();
+                                if (cl.MR == "0") cl.DT = "전세";
+                                else cl.DT = "월세";
+                                cl.BY = xn.ChildNodes[k]["건축년도"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.AreaE = xn.ChildNodes[k]["전용면적"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.AN = xn.ChildNodes[k]["연립다세대"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = ad2;
+                                cl.Bunji = xn.ChildNodes[k]["지번"].InnerText.Trim();
+                                cl.Floor = xn.ChildNodes[k]["층"].InnerText.Trim();
+                            }
+                            #endregion
+
+                            #region 토지
+                            else if (i == 10) //토지
+                            {
+                                cl.Deposit = xn.ChildNodes[k]["거래금액"].InnerText.Trim();
+                                cl.AreaD = xn.ChildNodes[k]["거래면적"].InnerText.Trim();
+                                cl.LandU = xn.ChildNodes[k]["용도지역"].InnerText.Trim();
+                                cl.DY = xn.ChildNodes[k]["년"].InnerText.Trim();
+                                cl.DM = xn.ChildNodes[k]["월"].InnerText.Trim();
+                                cl.DD = xn.ChildNodes[k]["일"].InnerText.Trim();
+                                cl.Partial = xn.ChildNodes[k]["지분거래구분"].InnerText.Trim();
+                                cl.LU = xn.ChildNodes[k]["지목"].InnerText.Trim();
+                                cl.Bub = xn.ChildNodes[k]["법정동"].InnerText.Trim();
+                                cl.Address1 = ad1;
+                                cl.Address2 = xn.ChildNodes[k]["시군구"].InnerText.Trim();
+                                cl.CDD = xn.ChildNodes[k]["해체사유발생일"].InnerText.Trim();
+                            }
+                            #endregion
+
+                            colums.Add(cl);
                         }
-                        #endregion
-                        colums.Add(cl);
                     }
+
                     //이 자리에서 테이블에 인서트
                 }
             }
@@ -302,11 +366,16 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
             //this.label10.Text = DateTime.Now.ToString("yyyy-MM-dd");
         }
 
+        
         #region 시군구 메서드
-        public string getAddress(string bub) //시군구 가져오기
+        public List<Ebmyundong> getAddress() //시군구 가져오기
         {
-            string address = "";
-            string sql = string.Format("SELECT TOP 1 시군구 FROM dbo.읍면동$ WHERE 법정동 = '{0}'", bub);
+            List<Ebmyundong> emd = new List<Ebmyundong>();
+            string sql = "select 시도,시군구, SUBSTRING(cast(cast(법정동코드 as numeric(11,0)) as varchar(11)), 1, 5) from dbo.읍면동$ " +
+                "where 법정동 != '서울특별시' and 법정동 != '경기도' and 법정동 != '강원도' and 법정동 != '충청북도' and 법정동 != '충청남도' " +
+                "and 법정동 != '경상북도' and 법정동 != '경상남도'and 법정동 != '전라북도' and 법정동 != '전라남도' and 법정동 != '제주특별자치도' " +
+                "and 법정동 != '인청광역시' and 법정동 != '광주광역시' and 법정동 != '부산광역시' and 법정동 != '대전광역시' and 법정동 != '대구광역시' " +
+                "and 법정동 != '울산광역시' and 법정동 != '세종특별자치시'";
             using (var connection = new SqlConnection(ConfigurationManager.ConnectionStrings["EFDbcontext"].ConnectionString))
             {
                 var command = new SqlCommand(sql, connection);
@@ -317,9 +386,28 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
                     {
                         while (reader.Read())
                         {
-                            address = reader["시군구"].ToString();
+                            Ebmyundong ed = new Ebmyundong();
+                            ed.Sido = reader["시도"].ToString();
+                            ed.Sigungu = reader["시군구"].ToString();
+                            ed.bubcode = reader["법정동"].ToString();
                         }
                     }
+                }
+            }
+            return emd;
+        }
+        #endregion
+
+        #region 시도, 시군구 찾기
+        public string searchAddress(string bub) //법정동으로 시도, 시군구 찾기
+        {
+            string address = "";
+            foreach(var rs in emd)
+            {
+                if(bub == rs.bubcode)
+                {
+                    address = rs.Sido + "!@#" + rs.Sigungu;
+                    break;
                 }
             }
             return address;
