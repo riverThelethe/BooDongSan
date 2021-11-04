@@ -102,7 +102,7 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
             string serviceKey = "?serviceKey=7LxnnA3%2B7VG88HLozXe%2BwxvC8dB58arnn4YM3mhcgmQcWXXsM4FY8ZS34MOyZieNoNwDBOeySlqV9YHjyMeMhA%3D%3D";
             string search = "";
 
-            for (int i = 10; i < urls.Length; i++) //부동산 거래 항목(주택, 아파트, 오피스텔 등등)
+            for (int i = 0; i < urls.Length; i++) //부동산 거래 항목(주택, 아파트, 오피스텔 등등)
             {
                 for (int j = 0; j < emd.Count; j++) //법정동 코드에 따른 분류
                 {
@@ -129,8 +129,10 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
                             //데이터 분류
                             XmlDocument xd = new XmlDocument();
                             xd.LoadXml(response);
-                            try
+
+                            try 
                             {
+                                //api 요청시 요청이 제대로 수행 되었는지 확인
                                 XmlNode xnode = xd["response"];
                                 string rcode = xnode.ChildNodes[0]["resultCode"].InnerText.Trim(); //결과코드 반환
                                 string rmsg = xnode.ChildNodes[0]["resultMsg"].InnerText.Trim(); //결과코드 반환
@@ -371,17 +373,15 @@ const string URL11 = "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/serv
                             {
                                 System.Diagnostics.Trace.WriteLine(ex);
                             }
-
-
                         }
                         catch (WebException ex)
                         {
                             System.Diagnostics.Trace.WriteLine(ex);
                         }
-                        //이 자리에서 테이블에 인서트
                     }
-
                 }
+                //이 자리에서 테이블에 인서트 컬럼 수가 영역별로 다 달라서 영역마다 DB에 업로드 해야 할 듯하다.
+                //colums.Clear();
             }
 
             //int today = Convert.ToInt32(xn.ChildNodes[0]["decideCnt"].InnerText);
